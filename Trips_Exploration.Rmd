@@ -7,45 +7,62 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+# Libraries
+
 ```{r}
 
+# More efficient file management
+# install.packages("here")
+library(here)
+
+# Functions for data exploration, cleaning, and tidying
 # install.packages("tidyverse")
 library(tidyverse)
 
+# Interact with Socrata open data portals
 # install.packages("RSocrata")
 library(RSocrata)
 
+# Efficiently read and write data
+# install.packages("readr")
+library(readr)
+
+# Graph interactivity
 # install.packages("plotly")
 library(plotly)
 
-# install.packages("leaflet")
-library(leaflet)
-
-# install.packages("leaflet.extras")
-library(leaflet.extras)
-
+# Improved color scales
 # install.packages("viridis")
 library(viridis)
 
 ```
 
-```{r}
+# Data Ingestion
 
-trip_endpoint <- "https://data.cityofchicago.org/resource/m6dm-c72p.csv"
-query_random <- "?$where=trip_id like '____%25123%25'"
+Data was originally obtained from the City of Chicago's Open Data Portal. The query to gather the data is included, but commented out below. Data can be interacted with directly through the Socrata API endpoint using the "Socrata Query Language" (SoQL). In order to increase data ingestion speeds, you can sign up with Socrata and create an API token. Data from this query is available in the `trips_random.csv` file.
 
-trip_endpoint_query_random <- paste0(trip_endpoint, query_random)
+```{r, eval = FALSE}
+
+# # Read in Socrata Token
+# source("socrata_token.R")
+# 
+# # Build query using SoQL
+# trip_endpoint <- "https://data.cityofchicago.org/resource/m6dm-c72p.csv"
+# query_random <- "?$where=trip_id like '____%25123%25'"
+# trip_endpoint_query_random <- paste0(trip_endpoint, query_random)
+# 
+# # Get data
+# trips_random <- read.socrata(trip_endpoint_query_random,
+#                              app_token = socrata_token)
 
 ```
 
-```{r}
+```{r, cache = TRUE}
 
-source("socrata_token.R")
-
-trips_random <- read.socrata(trip_endpoint_query_random,
-                             app_token = socrata_token)
+trips <- read_csv(here("trips_random.csv"))
 
 ```
+
 
 ```{r}
 
@@ -58,7 +75,7 @@ trips <-
          trips_pooled, pickup_centroid_latitude, pickup_centroid_longitude,
          pickup_centroid_location, dropoff_centroid_latitude,
          dropoff_centroid_longitude, dropoff_centroid_location) %>% 
-  mutate(shared_trip_authorized = if_else(shared_trip_authorized == "false", F, T))
+  mutate(shared_trip_authorized = if_else(shared_trip_authorized == "false", "Yes", "No"))
 
 ```
 

@@ -31,11 +31,15 @@ library(readr)
 # install.packages("plotly")
 library(plotly)
 
-# Improved color scales
-# install.packages("viridis")
-library(viridis)
+```
+
+```{r}
+
+source(here("formatting.R"))
+theme_set(theme_compassred())
 
 ```
+
 
 # Data Ingestion
 
@@ -65,318 +69,327 @@ trips <- read_csv(trip_url)
 
 ```
 
+A light amount of work needs to be done in order to prep the data to work with. In particular, when the data is queried from Socrata, the fields are pulled in in alphabetical order. Here, we rearrange the fields to put them back in the order that they appear in the dataset vignette.
 
 ```{r}
 
 trips <-
   trips %>% 
-  select(trip_id, trip_start_timestamp, trip_end_timestamp, trip_seconds,
+    select(trip_id, trip_start_timestamp, trip_end_timestamp, trip_seconds,
          trip_miles, pickup_census_tract, dropoff_census_tract,
          pickup_community_area, dropoff_community_area, fare, tip,
          additional_charges, trip_total, shared_trip_authorized,
          trips_pooled, pickup_centroid_latitude, pickup_centroid_longitude,
          pickup_centroid_location, dropoff_centroid_latitude,
-         dropoff_centroid_longitude, dropoff_centroid_location) %>% 
-  mutate(shared_trip_authorized = if_else(shared_trip_authorized == "false", "Yes", "No"))
+         dropoff_centroid_longitude, dropoff_centroid_location)
 
 ```
 
-# When do rideshares typically start?
+# Tips
+
+## What is the distribution of tips?
+
+Our analysis will focus on building answering the question "will a rideshare trip end with the driver receiving a tip?" In order to do that, we should start our analysis by examining the `tip` field.
+
+```{r}
+
+trips %>% 
+  filter(tip <= 10) %>%
+  ggplot(aes(x = tip)) +
+  geom_bar(fill = CR_red) +
+  scale_x_continuous(labels = scales::dollar) +
+  scale_y_continuous(labels = scales::comma) +
+  labs(title = "Count of tip values",
+       subtitle = "Comparison of tip amount to counts",
+       caption = "Source: Chicago Open Data Portal",
+       x = "Tip Amount",
+       y = "Number of Trips")
+
+```
+
+## What are other ways to recreate a similar graph?
+
+```{r}
+
+trips %>%
+  filter(tip <= 10) %>% 
+  ggplot(aes(x = tip)) +
+  geom_histogram(bins = 11, fill = CR_red) +
+  scale_x_continuous(labels = scales::dollar) +
+  scale_y_continuous(labels = scales::comma) +
+  labs(x = "Tip Amount",
+       y = "Number of Trips")
+
+```
+
+
+```{r}
+
+trips %>% 
+  filter(tip <= 10) %>% 
+  count(tip) %>% 
+  ggplot(aes(x = tip,
+             y = n)) +
+  geom_col(fill = CR_red) +
+  geom_text(aes(label = scales::comma(n)),
+            size = 3,
+            nudge_y = 7000) +
+  scale_x_continuous(labels = scales::dollar) +
+  scale_y_continuous(labels = scales::comma) +
+  labs(x = "Tip Amount",
+       y = "Number of Trips")
+
+```
+
+## Create tip_given
+
+For modeling, we would typically code a binary field with `0` and `1`. However, because our focus is on data visualization, we'll opt instead to code the field with `Tip` and `No Tip` for the sake of making a more intuitive plot. For future modeling we should recode the field.
+
+```{r}
+
+trips <-
+  trips %>%
+  mutate(tip_given = fct_rev(if_else(tip != 0, "Tip", "No Tip"))) %>% 
+  select(trip_id, tip_given, trip_start_timestamp:dropoff_centroid_location)
+
+```
+
+## Find overall tip %
+
+```{r}
+
+grand_total_tip_percent <-
+  trips %>% 
+  count(tip_given) %>% 
+  spread(key = 1, value = n) %>% 
+  transmute(percent_tip = `Tip` / (`No Tip` + `Tip`)) %>% 
+  as.numeric()
+
+```
+
+# Rideshare start times
+
+## When do rideshares typically start?
 
 ```{r}
 
 trips %>% 
   ggplot(aes(x = trip_start_timestamp)) +
-  geom_histogram(bins = 48)
-
-```
-
-# When do rideshares typically end?
-
-```{r}
-
-trips %>% 
-  ggplot(aes(x = trip_end_timestamp)) +
-  geom_histogram(bins = 48)
-
-```
-
-# How long do trips typically last for?
-
-```{r}
-
-trips %>% 
-  filter(trip_seconds <= 100 * 60) %>%
-  ggplot(aes(x = trip_seconds / 60)) +
   geom_histogram()
 
 ```
 
-# How many miles is the typical trip?
+## What if we consider tipping?
 
 ```{r}
 
-trips %>% 
-  filter(trip_miles <= 100) %>% 
-  ggplot(aes(x = trip_miles)) +
-  geom_histogram(bins = 100)
-
-```
-
-# What is the relationship between the time of day that a ride begins and the time that it lasts for?
-
-```{r}
-
-trips %>% 
+trips %>%
   ggplot(aes(x = trip_start_timestamp,
-             y = trip_seconds)) +
-  geom_point()
-
-```
-
-```{r}
-
-trips %>% 
-  filter(trip_seconds <= 10000) %>% 
-  ggplot(aes(x = trip_start_timestamp,
-             y = trip_seconds)) +
-  geom_point()
-
-```
-
-```{r}
-
-trips %>% 
-  filter(trip_seconds <= 10000) %>% 
-  ggplot(aes(x = trip_start_timestamp,
-             y = trip_seconds)) +
-  geom_point(alpha = 0.01)
-
-```
-
-```{r}
-
-trips %>% 
-  mutate(start_hour = as.numeric(format(trip_start_timestamp, format = "%H"))) %>% 
-  filter(trip_seconds <= 1500) %>% 
-  ggplot(aes(x = start_hour,
-             y = trip_seconds / 60,
-             group = start_hour)) +
-  geom_boxplot()
-
-```
-
-# What is the relationship between trip time and distance?
-
-```{r}
-
-trips %>% 
-  ggplot(aes(x = trip_seconds / 60,
-             y = trip_miles)) +
-  geom_point()
-
-```
-
-```{r}
-
-trips %>% 
-  ggplot(aes(x = trip_seconds / 60,
-             y = trip_miles)) +
-  geom_point(alpha = 0.1) +
-  geom_smooth()
-
-```
-
-# How much do riders pay for trips?
-
-```{r}
-
-trips %>% 
-  filter(fare <= 100) %>% 
-  ggplot(aes(x = fare)) +
+             fill = tip_given)) +
   geom_histogram()
 
 ```
 
-# How much do riders generally tip?
+## Is there another way?
 
 ```{r}
 
-trips %>% 
-  filter(tip <= 25, tip != 0) %>% 
-  ggplot(aes(x = tip)) +
-  geom_histogram(bins = 25)
+trips %>%
+  ggplot(aes(x = trip_start_timestamp)) +
+  geom_histogram() +
+  facet_wrap(~tip_given)
 
 ```
 
+## How about another?
+
+```{r}
+
+trips %>%
+  ggplot(aes(x = trip_start_timestamp,
+             fill = tip_given,
+             alpha = tip_given)) +
+  geom_density(size = 0) +
+  scale_fill_manual(values = c(CR_red, CR_blue)) +
+  scale_alpha_manual(values = c(0.75, 0.25)) +
+  scale_x_datetime(date_labels = "%b. '%y") +
+  labs(x = "Start Date",
+       y = "") +
+  theme(axis.text.y = element_blank(),
+        legend.position = c(0.9, 0.9),
+        legend.background = element_rect(fill = alpha("gray", 0.25),
+                                         size = 0),
+        legend.title = element_blank())
+
+```
+
+## What time do rideshares typically start?
+
 ```{r}
 
 trips %>% 
+  mutate(trip_start_time = as.POSIXct(format(trip_start_timestamp, 
+                                             format = "2019-01-01 %H:%M:%S"))) %>% 
+  ggplot(aes(x = trip_start_time,
+             fill = tip_given,
+             alpha = tip_given)) +
+  geom_density(size = 0) +
+  scale_fill_manual(values = c(CR_red, CR_blue)) +
+  scale_alpha_manual(values = c(0.75, 0.25)) +
+  scale_x_datetime(date_labels = "%H:%M") +
+  labs(x = "Start Time",
+       y = "") +
+  theme(axis.text.y = element_blank(),
+        legend.position = c(0.9, 0.9),
+        legend.background = element_rect(fill = alpha(cb_gray, 0.25),
+                                         size = 0),
+        legend.title = element_blank())
+
+```
+
+## How does the day of the week effect tipping?
+
+```{r}
+
+trips %>% 
+  mutate(day_of_week = format(trip_start_timestamp, format = "%A"),
+         trip_start_day = format(trip_start_timestamp, format = "%w")) %>% 
+  mutate(day_of_week = fct_rev(fct_reorder(f = day_of_week,
+                                           x = as.numeric(trip_start_day),
+                                           fun = min))) %>% 
+  ggplot(aes(x = day_of_week,
+             fill = fct_rev(as.factor(tip_given)),
+             alpha = fct_rev(as.factor(tip_given)))) +
+  geom_bar(position = "fill",
+           width = 0.5) +
+  geom_hline(yintercept = grand_total_tip_percent) +
+  scale_fill_manual(values = c(CR_blue, CR_red)) +
+  scale_alpha_manual(values = c(0.25, 0.75)) +
+  scale_y_continuous(labels = scales::percent) +
+  coord_flip() +
+  labs(title = "Day of the Week",
+       x = "",
+       y = "") +
+  theme(legend.background = element_rect(fill = alpha(cb_gray, 0.25),
+                                         size = 0),
+        legend.title = element_blank())
+
+```
+
+# Trip Distance
+
+## How does trip distance effect tipping?
+
+```{r}
+
+trips %>% 
+  filter(trip_miles <= 50) %>%
   ggplot(aes(x = trip_miles,
-             y = fare)) +
-  geom_point()
+             fill = tip_given,
+             alpha = tip_given)) +
+  geom_density(size = 0) +
+  scale_fill_manual(values = c(CR_red, CR_blue)) +
+  scale_alpha_manual(values = c(0.75, 0.25)) +
+  labs(x = "Miles",
+       y = "") +
+  theme(axis.text.y = element_blank(),
+        legend.position = c(0.9, 0.9),
+        legend.background = element_rect(fill = alpha(cb_gray, 0.25),
+                                         size = 0),
+        legend.title = element_blank())
 
 ```
+
+## What's happening for trips between 16 and 19 miles?
 
 ```{r}
 
 trips %>% 
-  ggplot(aes(x = trip_seconds,
-             y = fare)) +
-  geom_point()
+  filter(between(trip_miles, 16, 19)) %>% 
+  group_by(dropoff_centroid_location) %>% 
+  add_count() %>% 
+  ungroup() %>% 
+  mutate(rank = dense_rank(desc(n))) %>% 
+  mutate(dropoff_centroid_location = fct_reorder(f = dropoff_centroid_location,
+                                                 x = rank,
+                                                 fun = min,
+                                                 .desc = TRUE)) %>% 
+  filter(rank <= 10) %>% 
+  ggplot(aes(x = dropoff_centroid_location)) +
+  geom_bar(width = 0.5, fill = CR_red) +
+  scale_y_continuous(labels = scales::comma) +
+  coord_flip() +
+  labs(title = "Drop-off Location",
+       x = "",
+       y = "Count")
+
 
 ```
+
 
 ```{r}
 
 trips %>% 
-  ggplot(aes(x = trip_seconds,
-             y = tip)) +
-  geom_point()
+  filter(between(trip_miles, 16, 19)) %>% 
+  group_by(dropoff_centroid_location) %>% 
+  add_count() %>% 
+  ungroup() %>% 
+  mutate(rank = dense_rank(desc(n))) %>% 
+  mutate(dropoff_centroid_location = fct_reorder(f = dropoff_centroid_location,
+                                                 x = rank,
+                                                 fun = min,
+                                                 .desc = TRUE)) %>% 
+  filter(rank <= 10) %>%
+  ggplot(aes(x = dropoff_centroid_location,
+             fill = fct_rev(as.factor(tip_given)),
+             alpha = fct_rev(as.factor(tip_given)))) +
+  geom_bar(position = "fill",
+           width = 0.5) +
+  geom_hline(yintercept = grand_total_tip_percent) +
+  scale_fill_manual(values = c(CR_blue, CR_red)) +
+  scale_alpha_manual(values = c(0.25, 0.75)) +
+  scale_y_continuous(labels = scales::percent) +
+  coord_flip() +
+  labs(title = "Drop-off Location",
+       x = "",
+       y = "") +
+  theme(legend.background = element_rect(fill = alpha(cb_gray, 0.25),
+                                         size = 0),
+        legend.title = element_blank())
 
 ```
 
-# How many riders were included for a given trip?
+```{r}
 
-`trips_pooled` is defined as:
-> If customers were matched for a shared trip, how many trips, including this one, were pooled. All customer trips from the time the vehicle was empty until it was empty again contribute to this count, even if some customers were never present in the vehicle at the same time. Each trip making up the overall shared trip will have a separate record in this dataset, with the same value in this column.
+ohare_locations <- c("POINT (-87.9030396611 41.9790708201)",
+                     "POINT (-87.913624596 41.9802643146)")
+
+```
+
+## Drop-off O'Hare
 
 ```{r}
 
 trips %>% 
-  count(trips_pooled) %>% 
-  arrange(desc(n)) %>% 
-  mutate(percent = n / sum(n)) %>% 
-  ggplot(aes(x = trips_pooled,
-             y = percent)) +
-  geom_col()
-
-```
-
-# How does this change if we only include trips where a shared trip was authorized?
-
-```{r}
-
-trips %>% 
-  ggplot(aes(x = shared_trip_authorized)) +
-  geom_bar()
-
-```
-
-```{r}
-
-trips %>% 
-  filter(shared_trip_authorized) %>% 
-  count(trips_pooled) %>% 
-  arrange(desc(n)) %>% 
-  mutate(percent = n / sum(n)) %>% 
-  ggplot(aes(x = trips_pooled,
-             y = percent)) +
-  geom_col()
-
-```
-
-```{r}
-
-trips %>% 
-  ggplot(aes(x = trips_pooled)) +
-  geom_bar() +
-  facet_wrap(~shared_trip_authorized)
-
-```
-
-# How many census tracts are represented?
-
-```{r}
-
-trips %>% 
-  count(pickup_census_tract) %>% 
-  arrange(desc(n))
-
-trips %>% 
-  count(dropoff_census_tract) %>% 
-  arrange(desc(n))
-
-```
-
-```{r}
-
-trips %>% 
-  count(pickup_centroid_latitude, pickup_centroid_longitude, shared_trip_authorized) %>% 
-  spread(key = shared_trip_authorized, value = n) %>% 
-  mutate(percent_pool = `TRUE` / (`FALSE` + `TRUE`)) %>% 
-  arrange(percent_pool) %>% 
-  ggplot(aes(x = percent_pool)) +
-  geom_histogram()
-
-```
-
-```{r}
-
-trip_shares_by_centroid <-
-  trips %>% 
-  count(pickup_centroid_latitude, pickup_centroid_longitude, shared_trip_authorized) %>% 
-  spread(key = shared_trip_authorized, value = n) %>% 
-  mutate(`TRUE` = if_else(is.na(`TRUE`), as.numeric(0), as.numeric(`TRUE`)),
-         `FALSE` = if_else(is.na(`FALSE`), as.numeric(0), as.numeric(`FALSE`)),
-         total = `TRUE` + `FALSE`,
-         percent_pool = `TRUE` / (`FALSE` + `TRUE`))
-
-```
-
-```{r}
-
-pal <- colorNumeric(palette = viridis_pal()(100),
-                    domain = c(0,1))
-
-trip_shares_by_centroid %>%  
-  leaflet() %>% 
-  addProviderTiles(providers$OpenStreetMap.BlackAndWhite) %>% 
-  addCircleMarkers(
-    lng = ~pickup_centroid_longitude,
-    lat = ~pickup_centroid_latitude,
-    radius = 4,
-    fillColor = ~pal(trip_shares_by_centroid$percent_pool),
-    stroke = FALSE,
-    fillOpacity = 1,
-    popup = paste0("<b>Centroid Location: </b>(", round(trip_shares_by_centroid$pickup_centroid_latitude, 3), ", ", 
-                   round(trip_shares_by_centroid$pickup_centroid_longitude, 3), ")",
-                   "<br><b>Rideshare Percent:</b> ", scales::percent(trip_shares_by_centroid$percent_pool),
-                   "<br><b>Total Rides:</b> ", trip_shares_by_centroid$total)
-  )
-
-```
-
-```{r}
-
-trip_shares_by_centroid %>%  
-  leaflet() %>% 
-  addProviderTiles(providers$OpenStreetMap.BlackAndWhite) %>% 
-  addHeatmap(
-    lng = ~pickup_centroid_longitude,
-    lat = ~pickup_centroid_latitude,
-    intensity = ~percent_pool,
-    blur = 10,
-    radius = 15,
-    gradient = pal(trip_shares_by_centroid$percent_pool)
-  )
-
-```
-
-```{r}
-
-trips %>% 
-  mutate(ID = row_number()) %>% 
-  filter(str_detect(trip_id, "[0-9a-zA-Z]{4}.{0,}12.{0,}")) %>% 
-  select(trip_id, ID) %>% 
-  nrow() / trips %>% 
-  nrow() * 45.3
-
-```
-
-```{r}
-
+  mutate(airport = if_else(dropoff_centroid_location %in% ohare_locations,
+                           true = "Yes",
+                           false = "No")) %>% 
+  ggplot(aes(x = airport,
+             fill = fct_rev(as.factor(tip_given)),
+             alpha = fct_rev(as.factor(tip_given)))) +
+  geom_bar(position = "fill",
+           width = 0.5) +
+  geom_hline(yintercept = grand_total_tip_percent) +
+  scale_fill_manual(values = c(CR_blue, CR_red)) +
+  scale_alpha_manual(values = c(0.25, 0.75)) +
+  scale_y_continuous(labels = scales::percent) +
+  coord_flip() +
+  labs(title = "O'Hare Drop-off?",
+       x = "",
+       y = "") +
+  theme(legend.background = element_rect(fill = alpha(cb_gray, 0.25),
+                                         size = 0),
+        legend.title = element_blank())
 
 
 ```
-

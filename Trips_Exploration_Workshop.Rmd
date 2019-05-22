@@ -1,0 +1,250 @@
+---
+title: "Introduction to ggplot2"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Libraries
+
+```{r}
+
+# More efficient file management
+# install.packages("here")
+library(here)
+
+# Functions for data exploration, cleaning, and tidying
+# install.packages("tidyverse")
+library(tidyverse)
+
+# Interact with Socrata open data portals
+# install.packages("RSocrata")
+library(RSocrata)
+
+# Efficiently read and write data
+# install.packages("readr")
+library(readr)
+
+# Graph interactivity
+# install.packages("plotly")
+library(plotly)
+
+```
+
+```{r}
+
+source(here("formatting.R"))
+theme_set(theme_compassred())
+
+```
+
+
+# Data Ingestion
+
+Data was originally obtained from the City of Chicago's Open Data Portal. The query to gather the data is included, but commented out below. Data can be interacted with directly through the Socrata API endpoint using the "Socrata Query Language" (SoQL). In order to increase data ingestion speeds, you can sign up with Socrata and create an API token. Data from this query is available in the provided URL.
+
+```{r, eval = FALSE}
+
+# # Read in Socrata Token
+# source("socrata_token.R")
+# 
+# # Build query using SoQL
+# trip_endpoint <- "https://data.cityofchicago.org/resource/m6dm-c72p.csv"
+# query_random <- "?$where=trip_id like '____%25123%25'"
+# trip_endpoint_query_random <- paste0(trip_endpoint, query_random)
+# 
+# # Get data
+# trips_random <- read.socrata(trip_endpoint_query_random,
+#                              app_token = socrata_token)
+
+```
+
+```{r, cache = TRUE}
+
+# Read trips data
+trip_url <- "https://media.githubusercontent.com/media/rharrington31/drexel_visualization_workshop/master/trips_random.csv"
+trips <- read_csv(trip_url)
+
+```
+
+A light amount of work needs to be done in order to prep the data to work with. In particular, when the data is queried from Socrata, the fields are pulled in in alphabetical order. Here, we rearrange the fields to put them back in the order that they appear in the dataset vignette.
+
+```{r}
+
+trips <-
+  trips %>% 
+    select(trip_id, trip_start_timestamp, trip_end_timestamp, trip_seconds,
+         trip_miles, pickup_census_tract, dropoff_census_tract,
+         pickup_community_area, dropoff_community_area, fare, tip,
+         additional_charges, trip_total, shared_trip_authorized,
+         trips_pooled, pickup_centroid_latitude, pickup_centroid_longitude,
+         pickup_centroid_location, dropoff_centroid_latitude,
+         dropoff_centroid_longitude, dropoff_centroid_location)
+
+```
+
+# Tips
+
+## What is the distribution of tips?
+
+Our analysis will focus on building answering the question "will a rideshare trip end with the driver receiving a tip?" In order to do that, we should start our analysis by examining the `tip` field.
+
+```{r}
+
+
+
+```
+
+## What are other ways to recreate a similar graph?
+
+```{r}
+
+
+
+```
+
+
+```{r}
+
+
+
+```
+
+## Create tip_given
+
+For modeling, we would typically code a binary field with `0` and `1`. However, because our focus is on data visualization, we'll opt instead to code the field with `Tip` and `No Tip` for the sake of making a more intuitive plot. For future modeling we should recode the field.
+
+```{r}
+
+trips <-
+  trips %>%
+  mutate(tip_given = fct_rev(if_else(tip != 0, "Tip", "No Tip"))) %>% 
+  select(trip_id, tip_given, trip_start_timestamp:dropoff_centroid_location)
+
+```
+
+## Find overall tip %
+
+```{r}
+
+grand_total_tip_percent <-
+  trips %>% 
+  count(tip_given) %>% 
+  spread(key = 1, value = n) %>% 
+  transmute(percent_tip = `Tip` / (`No Tip` + `Tip`)) %>% 
+  as.numeric()
+
+```
+
+# Rideshare start times
+
+## When do rideshares typically start?
+
+```{r}
+
+
+
+```
+
+## What if we consider tipping?
+
+```{r}
+
+
+
+```
+
+## Is there another way?
+
+```{r}
+
+
+
+```
+
+## How about another?
+
+```{r}
+
+
+
+```
+
+## What time do rideshares typically start?
+
+```{r}
+
+trips %>% 
+  mutate(trip_start_time = as.POSIXct(format(trip_start_timestamp, 
+                                             format = "2019-01-01 %H:%M:%S")))
+
+```
+
+## How does the day of the week effect tipping?
+
+```{r}
+
+trips %>% 
+  mutate(day_of_week = format(trip_start_timestamp, format = "%A"),
+         trip_start_day = format(trip_start_timestamp, format = "%w")) %>% 
+  mutate(day_of_week = fct_rev(fct_reorder(f = day_of_week,
+                                           x = as.numeric(trip_start_day),
+                                           fun = min)))
+
+```
+
+# Trip Distance
+
+## How does trip distance effect tipping?
+
+```{r}
+
+
+
+```
+
+## What's happening for trips between 16 and 19 miles?
+
+```{r}
+
+
+
+```
+
+
+```{r}
+
+trips %>% 
+  filter(between(trip_miles, 16, 19)) %>% 
+  group_by(dropoff_centroid_location) %>% 
+  add_count() %>% 
+  ungroup() %>% 
+  mutate(rank = dense_rank(desc(n))) %>% 
+  mutate(dropoff_centroid_location = fct_reorder(f = dropoff_centroid_location,
+                                                 x = rank,
+                                                 fun = min,
+                                                 .desc = TRUE)) %>% 
+  filter(rank <= 10)
+
+```
+
+```{r}
+
+ohare_locations <- c("POINT (-87.9030396611 41.9790708201)",
+                     "POINT (-87.913624596 41.9802643146)")
+
+```
+
+## Drop-off O'Hare
+
+```{r}
+
+trips %>% 
+  mutate(airport = if_else(dropoff_centroid_location %in% ohare_locations,
+                           true = "Yes",
+                           false = "No"))
+
+
+```

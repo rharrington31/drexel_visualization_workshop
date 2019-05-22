@@ -1,7 +1,5 @@
 ---
-title: "Untitled"
-author: "Ryan Harrington"
-date: "5/14/2019"
+title: "Introduction to ggplot2"
 output: html_document
 ---
 
@@ -34,9 +32,9 @@ library(viridis)
 ```{r}
 
 trip_endpoint <- "https://data.cityofchicago.org/resource/m6dm-c72p.csv"
-query_date <- "?$where=trip_start_timestamp >= '2019-03-31T00:00:00.000'"
+query_random <- "?$where=trip_id like '____%25123%25'"
 
-trip_endpoint_query_date <- paste0(trip_endpoint, query_date)
+trip_endpoint_query_random <- paste0(trip_endpoint, query_random)
 
 ```
 
@@ -44,8 +42,8 @@ trip_endpoint_query_date <- paste0(trip_endpoint, query_date)
 
 source("socrata_token.R")
 
-trips <- read.socrata(trip_endpoint_query_date,
-                      app_token = socrata_token)
+trips_random <- read.socrata(trip_endpoint_query_random,
+                             app_token = socrata_token)
 
 ```
 

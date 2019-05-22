@@ -39,7 +39,7 @@ library(viridis)
 
 # Data Ingestion
 
-Data was originally obtained from the City of Chicago's Open Data Portal. The query to gather the data is included, but commented out below. Data can be interacted with directly through the Socrata API endpoint using the "Socrata Query Language" (SoQL). In order to increase data ingestion speeds, you can sign up with Socrata and create an API token. Data from this query is available in the `trips_random.csv` file.
+Data was originally obtained from the City of Chicago's Open Data Portal. The query to gather the data is included, but commented out below. Data can be interacted with directly through the Socrata API endpoint using the "Socrata Query Language" (SoQL). In order to increase data ingestion speeds, you can sign up with Socrata and create an API token. Data from this query is available in the provided URL.
 
 ```{r, eval = FALSE}
 
@@ -59,7 +59,9 @@ Data was originally obtained from the City of Chicago's Open Data Portal. The qu
 
 ```{r, cache = TRUE}
 
-trips <- read_csv(here("trips_random.csv"))
+# Read trips data
+trip_url <- "https://media.githubusercontent.com/media/rharrington31/drexel_visualization_workshop/master/trips_random.csv"
+trips <- read_csv(trip_url)
 
 ```
 
